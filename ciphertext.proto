@@ -1,0 +1,23 @@
+syntax = "proto2";
+package de.semjonov.fuechse;
+
+message CiphertextBlob {
+
+  enum kdf_type {
+    None    = 0;
+    Argon2  = 1;
+    PBKDF2  = 2;
+  }
+
+  enum cipher_type {
+    ChaCha20Poly1305  = 0;
+    AESGCM            = 1;
+  }
+
+  optional kdf_type     kdf     = 1;
+  optional cipher_type  cipher  = 2;
+
+  required bytes        nonce   = 3;
+  required bytes        text    = 4;
+
+}
