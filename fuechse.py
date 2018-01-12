@@ -12,9 +12,11 @@ from base64 import b64encode, b64decode
 from ciphertext_pb2 import CiphertextBlob
 
 # authenticated encryption primitives
+# https://cryptography.io/en/latest/hazmat/primitives/aead/
 from cryptography.hazmat.primitives.ciphers import aead as AEAD
 
 # key derivation functions
+# https://argon2-cffi.readthedocs.io/en/stable/api.html
 from argon2.low_level import hash_secret_raw as Argon2Hash, Type as Argon2Type
 
 # prompt on stderr, like getpass
