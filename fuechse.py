@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
 # basics
-from os import urandom
-#import readline
-from sys import stderr, stdout
+import os
+import readline
+import sys
 from argparse import ArgumentParser, FileType
 from getpass import getpass
 from base64 import b64encode, b64decode
@@ -21,22 +21,23 @@ from argon2.low_level import hash_secret_raw as Argon2Hash, Type as Argon2Type
 
 # prompt on stderr, like getpass
 def prompt(text=None):
-  if text: stderr.write(text)
-  return input()
+  if text: sys.stderr.write(text)
+  return input('')
 
 class KDF:
 
   def argon2(password: bytes, salt: bytes = None, time_cost: int = 30, memory_cost: int = 15):
-    return Argon2Hash(password, salt if salt != None else urandom(16), time_cost, 2**memory_cost, parallelism=4, hash_len=12+32, type=Argon2Type.I)
+    return Argon2Hash(password, salt if salt != None else os.urandom(16), time_cost, 2**memory_cost, parallelism=4, hash_len=12+32, type=Argon2Type.I)
 
 
 argparser = ArgumentParser()
 
+# input file and mode
 arg_mode = argparser.add_mutually_exclusive_group(required=True)
-arg_mode.add_argument('-e', '--encrypt', action='store_true', help='encrypt file')
-arg_mode.add_argument('-d', '--decrypt', action='store_true', help='decrypt file')
+arg_mode.add_argument('-e', '--encrypt', type=FileType('rb'), metavar='file', help='encrypt file')
+arg_mode.add_argument('-d', '--decrypt', type=FileType('rb'), metavar='file', help='decrypt file')
 
-argparser.add_argument('-f', '--file', type=FileType('rb'), default='/dev/stdin',  metavar='file', help='input file (default: <stdin>)')
+# output file
 argparser.add_argument('-o', '--out',  type=FileType('wb'), default='/dev/stdout', metavar='file', help='output file (default: <stdout>)')
 
 args = argparser.parse_args()
@@ -48,17 +49,17 @@ if False:
   pw = getpass('Enter password: ')
   print(KDF.argon2(pw.encode('utf-8')))
 
-
+args.file = args.encrypt if args.encrypt else args.decrypt
 with args.file as infile, args.out as outfile:
 
   if args.encrypt:
 
     blob = CiphertextBlob()
 
-    key = urandom(32)
-    blob.nonce = urandom(12)
+    key = os.urandom(32)
+    blob.nonce = os.urandom(12)
 
-    print('Key   :', b64encode(key).decode(), file=stderr)
+    print('Encryption key:', b64encode(key).decode(), file=sys.stderr)
     aead = AEAD.ChaCha20Poly1305(key)
     blob.text = aead.encrypt(blob.nonce, infile.read(), None)
 
