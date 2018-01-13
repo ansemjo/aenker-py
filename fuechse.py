@@ -9,7 +9,7 @@ from getpass import getpass
 from base64 import b64encode, b64decode
 
 # protobuf serialization
-from ciphertext_pb2 import CiphertextBlob
+from ciphertext_pb2 import AuthenticatedCiphertextBlob as Cipherbuf
 
 # authenticated encryption primitives
 # https://cryptography.io/en/latest/hazmat/primitives/aead/
@@ -56,27 +56,27 @@ with \
 
   if args.decrypt:
 
-    blob = CiphertextBlob()
-    blob.ParseFromString(infile.read())
+    cb = Cipherbuf()
+    cb.ParseFromString(infile.read())
 
     key = b64decode(einput('Enter Base64 encoded key: '))
     aead = AEAD.ChaCha20Poly1305(key)
-    message = aead.decrypt(blob.nonce, blob.text, None)
+    message = aead.decrypt(cb.nonce, cb.text, None)
 
     outfile.write(message)
 
   else:
 
-    blob = CiphertextBlob()
+    cb = Cipherbuf()
 
     key = os.urandom(32)
-    blob.nonce = os.urandom(12)
+    cb.nonce = os.urandom(12)
 
     print('Encryption key:', b64encode(key).decode(), file=sys.stderr)
     aead = AEAD.ChaCha20Poly1305(key)
-    blob.text = aead.encrypt(blob.nonce, infile.read(), None)
+    cb.text = aead.encrypt(cb.nonce, infile.read(), None)
 
-    outfile.write(blob.SerializeToString())
+    outfile.write(cb.SerializeToString())
 
 
 
