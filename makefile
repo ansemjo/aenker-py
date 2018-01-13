@@ -8,7 +8,7 @@ help :
 	@echo 'run `make install` to install $(BIN) in $(PREFIX)/bin'
 
 aenker_pb2.py :
-	protoc --python-out=. aenker.proto
+	protoc --python_out=. aenker.proto
 
 install : aenker_pb2.py aenker.py
 	echo '#!/usr/bin/env python3' | cat - aenker_pb2.py aenker.py | install /dev/stdin $(MODE) -T $(PREFIX)/bin/$(BIN)
