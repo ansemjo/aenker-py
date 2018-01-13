@@ -42,12 +42,9 @@ argparser.add_argument('-o', '--out',  type=FileType('wb'), default='/dev/stdout
 
 args = argparser.parse_args()
 
+# dummy: get password-derived key
+if False: print(KDF.argon2(getpass('Enter password: ').encode('utf-8')))
 
-# old: generate
-if False:
-
-  pw = getpass('Enter password: ')
-  print(KDF.argon2(pw.encode('utf-8')))
 
 args.file = args.encrypt if args.encrypt else args.decrypt
 with args.file as infile, args.out as outfile:
