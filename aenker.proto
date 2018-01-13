@@ -3,21 +3,28 @@ package de.semjonov.aenker;
 
 message AuthenticatedCiphertextBlob {
 
-  enum kdf_type {
+  enum kdf_t {
     None    = 0;
     Argon2  = 1;
     PBKDF2  = 2;
   }
 
-  enum cipher_type {
+  enum cipher_t {
     ChaCha20Poly1305  = 0;
     AESGCM            = 1;
   }
 
-  optional kdf_type     kdf     = 1;
-  optional cipher_type  cipher  = 2;
+  message kdf_opts_t {
+    optional int32  time_cost   = 1 [default = 21];
+    optional int32  memory_cost = 2 [default = 15];
+    optional int32  parallelism = 3 [default =  4];
+  }
 
-  required bytes        nonce   = 3;
-  required bytes        text    = 4;
+  optional cipher_t     cipher    = 1;
+  optional kdf_t        kdf       = 2;
+  optional kdf_opts_t   kdf_opts  = 3;
+
+  required bytes        nonce     = 4;
+  required bytes        text      = 5;
 
 }

@@ -9,7 +9,9 @@ import getpass
 from base64 import b64encode, b64decode
 
 # protobuf serialization
-from aenker_pb2 import AuthenticatedCiphertextBlob as Aenker
+try: Aenker = AuthenticatedCiphertextBlob
+except NameError:
+  from aenker_pb2 import AuthenticatedCiphertextBlob as Aenker
 
 # authenticated encryption primitives
 # https://cryptography.io/en/latest/hazmat/primitives/aead/
@@ -29,13 +31,15 @@ passwd = lambda prompt='Enter Password: ': getpass.getpass(prompt).encode('utf-8
 split = lambda string, index: (string[:index], string[index:])
 
 # get aead cipher depending on arguments
-aead = lambda key, cipher: AEAD.AESGCM(key) if cipher == Aenker.cipher_type.Value('AESGCM') else AEAD.ChaCha20Poly1305(key)
+aead = lambda key, cipher: AEAD.AESGCM(key) if cipher == Aenker.cipher_t.Value('AESGCM') else AEAD.ChaCha20Poly1305(key)
 
 # key derivation wrappers
 class KDF:
 
-  argon2 = lambda password, salt, i=30, m=15, p=4 :\
-    split(argon2_raw(password, salt, time_cost=i, memory_cost=2**m, parallelism=p, hash_len=44, type=argon2_type.I), 12)
+  argon2 = lambda password, blob :\
+    split(argon2_raw(password, blob.nonce, \
+    blob.kdf_opts.time_cost, 2**blob.kdf_opts.memory_cost, blob.kdf_opts.parallelism, \
+    hash_len=44, type=argon2_type.I), 12)
 
 # parse commandline arguments
 argparser = argparse.ArgumentParser()
@@ -61,6 +65,10 @@ grp_kdf = argparser.add_argument_group('Key generation')
 arg_kdf = grp_kdf.add_mutually_exclusive_group()
 arg_kdf.add_argument('-r', '--random', action='store_true', help='use a random key from os.urandom()')
 arg_kdf.add_argument('-p', '--password', action='store_true', help='use Argon2 to derive key (default)')
+grp_kdf.add_argument('--kdf-time-cost', type=int, help='KDF time cost / iterations (default: 21)', metavar='i')
+grp_kdf.add_argument('--kdf-memory-cost', type=int, help='KDF memory cost, power of two (default: 15)', metavar='m')
+grp_kdf.add_argument('--kdf-parallelism', type=int, help='KDF parallelism (default: 4)', metavar='p')
+
 
 # arg_grp: cipher algorithm
 grp_cipher = argparser.add_argument_group('Cipher selection')
@@ -83,13 +91,13 @@ with \
     ae.ParseFromString(infile.read())
 
     # random key, stored nonce
-    if ae.kdf == ae.kdf_type.Value('None'):
+    if ae.kdf == ae.kdf_t.Value('None'):
       nonce = ae.nonce
       key = b64decode(einput('Enter Base64 encoded key: '))
 
     # password-derived key and nonce, stored salt
     else:
-      nonce, key = KDF.argon2(passwd(), ae.nonce)
+      nonce, key = KDF.argon2(passwd(), ae)
 
     # get cipher type and decrypt
     message = aead(key, ae.cipher).decrypt(nonce, ae.text, None)
@@ -106,12 +114,15 @@ with \
 
     # password-derived key and nonce, store salt
     else:
-      ae.kdf = ae.kdf_type.Value('Argon2')
+      ae.kdf = ae.kdf_t.Value('Argon2')
+      if args.kdf_time_cost:    ae.kdf_opts.time_cost   = args.kdf_time_cost
+      if args.kdf_memory_cost:  ae.kdf_opts.memory_cost = args.kdf_memory_cost
+      if args.kdf_parallelism:  ae.kdf_opts.parallelism = args.kdf_parallelism
       ae.nonce = os.urandom(12)
-      nonce, key = KDF.argon2(passwd(), ae.nonce)
+      nonce, key = KDF.argon2(passwd(), ae)
 
     # set cipher type and encrypt
-    if args.aes_gcm: ae.cipher = ae.cipher_type.Value('AESGCM')
+    if args.aes_gcm: ae.cipher = ae.cipher_t.Value('AESGCM')
     ae.text = aead(key, ae.cipher).encrypt(nonce, infile.read(), None)
     outfile.write(ae.SerializeToString())
 
