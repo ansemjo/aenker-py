@@ -35,13 +35,18 @@ argparser = argparse.ArgumentParser()
 # arg: input file
 argparser.add_argument('file', nargs='?', help='input file (default: sys.stdin)')
 
-# arg: mode
+# arg: subcommand
 arg_mode = argparser.add_mutually_exclusive_group()
-arg_mode.add_argument('-e', '--encrypt', action='store_true', help='encrypt file')
+arg_mode.add_argument('-e', '--encrypt', action='store_true', help='encrypt file (default)')
 arg_mode.add_argument('-d', '--decrypt', action='store_true', help='decrypt file')
 
 # arg: output file
 argparser.add_argument('-o', '--out', metavar='file', help='output file (default: sys.stdout)')
+
+# arg: key derivation mode
+arg_kdf = argparser.add_mutually_exclusive_group()
+arg_kdf.add_argument('-r', '--random', action='store_true', help='use a randomly generated key')
+arg_kdf.add_argument('-p', '--password', action='store_true', help='use Argon2 to derive key (default)')
 
 args = argparser.parse_args()
 
@@ -69,19 +74,23 @@ with \
 
     ae = Aenker()
 
-    key = os.urandom(32)
-    ae.nonce = os.urandom(12)
+    if args.random:
 
-    print('Encryption key:', b64encode(key).decode(), file=sys.stderr)
+      ae.nonce = os.urandom(12)
+      key = os.urandom(32)
+      print('Encryption key:', b64encode(key).decode(), file=sys.stderr)
+
+    else:
+
+      ae.kdf = ae.kdf_type.Value('Argon2')
+      password = getpass('Enter password: ').encode('utf-8')
+      H = KDF.argon2(password)
+
+      ae.nonce = H[:12]
+      key      = H[12:]
+
     aead = AEAD.ChaCha20Poly1305(key)
     ae.text = aead.encrypt(ae.nonce, infile.read(), None)
 
     outfile.write(ae.SerializeToString())
 
-
-
-# spec:
-# for randomly keyed:     0x00 || null[3] || nonce[16] || ciphertext[+]         secret: key[32]
-# for password derived:   0x01 || KDF options[3] || salt[16] || ciphertext [+]
-#       |--> argon2 hash output: 16 + 32 = nonce + key for AEAD
-#       \--> use KDF options as AEAD associated data, just for shits and giggles
