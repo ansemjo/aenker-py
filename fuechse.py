@@ -4,7 +4,7 @@
 import os
 import readline
 import sys
-from argparse import ArgumentParser, FileType
+import argparse
 from getpass import getpass
 from base64 import b64encode, b64decode
 
@@ -30,15 +30,18 @@ class KDF:
     return Argon2Hash(password, salt if salt != None else os.urandom(16), time_cost, 2**memory_cost, parallelism=4, hash_len=12+32, type=Argon2Type.I)
 
 
-argparser = ArgumentParser()
+argparser = argparse.ArgumentParser()
 
-# input file and mode
+# input file
+argparser.add_argument('file', nargs='?', help='input file (default: sys.stdin)')
+
+# mode
 arg_mode = argparser.add_mutually_exclusive_group(required=True)
-arg_mode.add_argument('-e', '--encrypt', type=FileType('rb'), metavar='file', help='encrypt file')
-arg_mode.add_argument('-d', '--decrypt', type=FileType('rb'), metavar='file', help='decrypt file')
+arg_mode.add_argument('-e', '--encrypt', action='store_true', help='encrypt file')
+arg_mode.add_argument('-d', '--decrypt', action='store_true', help='decrypt file')
 
 # output file
-argparser.add_argument('-o', '--out',  type=FileType('wb'), default='/dev/stdout', metavar='file', help='output file (default: <stdout>)')
+argparser.add_argument('-o', '--out', metavar='file', help='output file (default: sys.stdout)')
 
 args = argparser.parse_args()
 
@@ -46,8 +49,7 @@ args = argparser.parse_args()
 if False: print(KDF.argon2(getpass('Enter password: ').encode('utf-8')))
 
 
-args.file = args.encrypt if args.encrypt else args.decrypt
-with args.file as infile, args.out as outfile:
+with open(args.file, mode='rb') if args.file else sys.stdin.buffer as infile, open(args.out, mode='wb') if args.out else sys.stdout.buffer as outfile:
 
   if args.encrypt:
 
