@@ -40,24 +40,31 @@ class KDF:
 # parse commandline arguments
 argparser = argparse.ArgumentParser()
 
-# arg: input file
-argparser.add_argument('file', nargs='?', help='input file (default: sys.stdin)')
+# arg_grp: input / output files
+grp_io = argparser.add_argument_group('file selection')
+grp_io.add_argument('file', nargs='?', help='input file (default: sys.stdin)')
+grp_io.add_argument('-o', '--out', metavar='file', help='output file (default: sys.stdout)')
 
 # arg: subcommand
-arg_mode = argparser.add_mutually_exclusive_group()
-arg_mode.add_argument('-e', '--encrypt', action='store_true', help='encrypt file (default)')
-arg_mode.add_argument('-d', '--decrypt', action='store_true', help='decrypt file')
+arg_cmd = argparser.add_mutually_exclusive_group()
+arg_cmd.add_argument('-e', '--encrypt', action='store_true', help='encrypt file (default)')
+arg_cmd.add_argument('-d', '--decrypt', action='store_true', help='decrypt file')
 
-# arg: output file
-argparser.add_argument('-o', '--out', metavar='file', help='output file (default: sys.stdout)')
+# arg_grp: encryption options
+grp_options = argparser.add_argument_group('Encryption options', description="""
+The following options are only useful during encryption.
+Choices are saved in the serialized file.
+""")
 
-# arg: key derivation mode
-arg_kdf = argparser.add_mutually_exclusive_group()
-arg_kdf.add_argument('-r', '--random', action='store_true', help='use a randomly generated key')
+# arg_grp: key derivation mode
+grp_kdf = argparser.add_argument_group('Key generation')
+arg_kdf = grp_kdf.add_mutually_exclusive_group()
+arg_kdf.add_argument('-r', '--random', action='store_true', help='use a random key from os.urandom()')
 arg_kdf.add_argument('-p', '--password', action='store_true', help='use Argon2 to derive key (default)')
 
-# arg: cipher algorithm
-arg_cipher = argparser.add_mutually_exclusive_group()
+# arg_grp: cipher algorithm
+grp_cipher = argparser.add_argument_group('Cipher selection')
+arg_cipher = grp_cipher.add_mutually_exclusive_group()
 arg_cipher.add_argument('-c', '--chacha20', action='store_true', help='use ChaCha20Poly1305 cipher (default)')
 arg_cipher.add_argument('-g', '--aes-gcm', action='store_true', help='use AES-GCM cipher')
 
