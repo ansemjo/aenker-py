@@ -58,39 +58,54 @@ with \
   open(args.file, mode='rb') if args.file else sys.stdin.buffer as infile  ,\
   open(args.out,  mode='wb') if args.out else sys.stdout.buffer as outfile :
 
+  ae = Aenker()
 
+  # decryption
   if args.decrypt:
 
-    ae = Aenker()
     ae.ParseFromString(infile.read())
 
-    key = b64decode(einput('Enter Base64 encoded key: '))
+    # random key
+    if ae.kdf == ae.kdf_type.Value('None'):
+
+      nonce = ae.nonce
+      key = b64decode(einput('Enter Base64 encoded key: '))
+
+    # password-derived key
+    else:
+
+      password = getpass('Enter password: ').encode('utf-8')
+      derived = KDF.argon2(password, ae.nonce)
+      nonce = derived[:12]
+      key   = derived[12:]
+
     aead = AEAD.ChaCha20Poly1305(key)
-    message = aead.decrypt(ae.nonce, ae.text, None)
+    message = aead.decrypt(nonce, ae.text, None)
 
     outfile.write(message)
 
+  # encryption
   else:
 
-    ae = Aenker()
-
+    # random key
     if args.random:
 
-      ae.nonce = os.urandom(12)
+      nonce = ae.nonce = os.urandom(12)
       key = os.urandom(32)
       print('Encryption key:', b64encode(key).decode(), file=sys.stderr)
 
+    # password-derived key
     else:
 
       ae.kdf = ae.kdf_type.Value('Argon2')
       password = getpass('Enter password: ').encode('utf-8')
-      H = KDF.argon2(password)
-
-      ae.nonce = H[:12]
-      key      = H[12:]
+      ae.nonce = os.urandom(12)
+      derived = KDF.argon2(password, ae.nonce)
+      nonce = derived[:12]
+      key   = derived[12:]
 
     aead = AEAD.ChaCha20Poly1305(key)
-    ae.text = aead.encrypt(ae.nonce, infile.read(), None)
+    ae.text = aead.encrypt(nonce, infile.read(), None)
 
     outfile.write(ae.SerializeToString())
 
