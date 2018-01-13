@@ -20,27 +20,27 @@ from cryptography.hazmat.primitives.ciphers import aead as AEAD
 from argon2.low_level import hash_secret_raw as Argon2Hash, Type as Argon2Type
 
 # prompt on stderr, like getpass
-def prompt(text=None):
-  if text: sys.stderr.write(text)
-  return input('')
+def einput(text): sys.stderr.write(text); return input()
 
+# key derivation wrappers
 class KDF:
 
-  def argon2(password: bytes, salt: bytes = None, time_cost: int = 30, memory_cost: int = 15):
-    return Argon2Hash(password, salt if salt != None else os.urandom(16), time_cost, 2**memory_cost, parallelism=4, hash_len=12+32, type=Argon2Type.I)
+  def argon2(password, salt=None, time_cost=30, memory_cost=15):
+    return Argon2Hash(password, salt if salt != None else os.urandom(16),
+        time_cost, 2**memory_cost, parallelism=4, hash_len=12+32, type=Argon2Type.I)
 
-
+# parse commandline arguments
 argparser = argparse.ArgumentParser()
 
-# input file
+# arg: input file
 argparser.add_argument('file', nargs='?', help='input file (default: sys.stdin)')
 
-# mode
-arg_mode = argparser.add_mutually_exclusive_group(required=True)
+# arg: mode
+arg_mode = argparser.add_mutually_exclusive_group()
 arg_mode.add_argument('-e', '--encrypt', action='store_true', help='encrypt file')
 arg_mode.add_argument('-d', '--decrypt', action='store_true', help='decrypt file')
 
-# output file
+# arg: output file
 argparser.add_argument('-o', '--out', metavar='file', help='output file (default: sys.stdout)')
 
 args = argparser.parse_args()
@@ -48,10 +48,24 @@ args = argparser.parse_args()
 # dummy: get password-derived key
 if False: print(KDF.argon2(getpass('Enter password: ').encode('utf-8')))
 
+# open files
+with \
+  open(args.file, mode='rb') if args.file else sys.stdin.buffer as infile  ,\
+  open(args.out,  mode='wb') if args.out else sys.stdout.buffer as outfile :
 
-with open(args.file, mode='rb') if args.file else sys.stdin.buffer as infile, open(args.out, mode='wb') if args.out else sys.stdout.buffer as outfile:
 
-  if args.encrypt:
+  if args.decrypt:
+
+    blob = CiphertextBlob()
+    blob.ParseFromString(infile.read())
+
+    key = b64decode(einput('Enter Base64 encoded key: '))
+    aead = AEAD.ChaCha20Poly1305(key)
+    message = aead.decrypt(blob.nonce, blob.text, None)
+
+    outfile.write(message)
+
+  else:
 
     blob = CiphertextBlob()
 
@@ -64,17 +78,6 @@ with open(args.file, mode='rb') if args.file else sys.stdin.buffer as infile, op
 
     outfile.write(blob.SerializeToString())
 
-
-  elif args.decrypt:
-
-    blob = CiphertextBlob()
-    blob.ParseFromString(infile.read())
-
-    key = b64decode(prompt('Enter Base64 encoded key: '))
-    aead = AEAD.ChaCha20Poly1305(key)
-    message = aead.decrypt(blob.nonce, blob.text, None)
-
-    outfile.write(message)
 
 
 # spec:
