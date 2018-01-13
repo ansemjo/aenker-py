@@ -5,7 +5,7 @@ import os
 import readline
 import sys
 import argparse
-from getpass import getpass
+import getpass
 from base64 import b64encode, b64decode
 
 # protobuf serialization
@@ -17,17 +17,22 @@ from cryptography.hazmat.primitives.ciphers import aead as AEAD
 
 # key derivation functions
 # https://argon2-cffi.readthedocs.io/en/stable/api.html
-from argon2.low_level import hash_secret_raw as Argon2Hash, Type as Argon2Type
+from argon2.low_level import hash_secret_raw as argon2_raw, Type as argon2_type
 
-# prompt on stderr, like getpass
+# prompt for input on stderr
 def einput(text): sys.stderr.write(text); return input()
+
+# getpass and encode
+passwd = lambda prompt='Enter Password: ': getpass.getpass(prompt).encode('utf-8')
+
+# split string at index
+split = lambda string, index: (string[:index], string[index:])
 
 # key derivation wrappers
 class KDF:
 
-  def argon2(password, salt=None, time_cost=30, memory_cost=15):
-    return Argon2Hash(password, salt if salt != None else os.urandom(16),
-        time_cost, 2**memory_cost, parallelism=4, hash_len=12+32, type=Argon2Type.I)
+  argon2 = lambda password, salt, i=30, m=15, p=4 :\
+    split(argon2_raw(password, salt, time_cost=i, memory_cost=2**m, parallelism=p, hash_len=44, type=argon2_type.I), 12)
 
 # parse commandline arguments
 argparser = argparse.ArgumentParser()
@@ -50,9 +55,6 @@ arg_kdf.add_argument('-p', '--password', action='store_true', help='use Argon2 t
 
 args = argparser.parse_args()
 
-# dummy: get password-derived key
-if False: print(KDF.argon2(getpass('Enter password: ').encode('utf-8')))
-
 # open files
 with \
   open(args.file, mode='rb') if args.file else sys.stdin.buffer as infile  ,\
@@ -67,17 +69,12 @@ with \
 
     # random key
     if ae.kdf == ae.kdf_type.Value('None'):
-
       nonce = ae.nonce
       key = b64decode(einput('Enter Base64 encoded key: '))
 
     # password-derived key
     else:
-
-      password = getpass('Enter password: ').encode('utf-8')
-      derived = KDF.argon2(password, ae.nonce)
-      nonce = derived[:12]
-      key   = derived[12:]
+      nonce, key = KDF.argon2(passwd(), ae.nonce)
 
     aead = AEAD.ChaCha20Poly1305(key)
     message = aead.decrypt(nonce, ae.text, None)
@@ -89,20 +86,15 @@ with \
 
     # random key
     if args.random:
-
       nonce = ae.nonce = os.urandom(12)
       key = os.urandom(32)
       print('Encryption key:', b64encode(key).decode(), file=sys.stderr)
 
     # password-derived key
     else:
-
       ae.kdf = ae.kdf_type.Value('Argon2')
-      password = getpass('Enter password: ').encode('utf-8')
       ae.nonce = os.urandom(12)
-      derived = KDF.argon2(password, ae.nonce)
-      nonce = derived[:12]
-      key   = derived[12:]
+      nonce, key = KDF.argon2(passwd(), ae.nonce)
 
     aead = AEAD.ChaCha20Poly1305(key)
     ae.text = aead.encrypt(nonce, infile.read(), None)
