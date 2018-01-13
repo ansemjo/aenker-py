@@ -28,6 +28,9 @@ passwd = lambda prompt='Enter Password: ': getpass.getpass(prompt).encode('utf-8
 # split string at index
 split = lambda string, index: (string[:index], string[index:])
 
+# get aead cipher depending on arguments
+aead = lambda key, cipher: AEAD.AESGCM(key) if cipher == Aenker.cipher_type.Value('AESGCM') else AEAD.ChaCha20Poly1305(key)
+
 # key derivation wrappers
 class KDF:
 
@@ -53,6 +56,11 @@ arg_kdf = argparser.add_mutually_exclusive_group()
 arg_kdf.add_argument('-r', '--random', action='store_true', help='use a randomly generated key')
 arg_kdf.add_argument('-p', '--password', action='store_true', help='use Argon2 to derive key (default)')
 
+# arg: cipher algorithm
+arg_cipher = argparser.add_mutually_exclusive_group()
+arg_cipher.add_argument('-c', '--chacha20', action='store_true', help='use ChaCha20Poly1305 cipher (default)')
+arg_cipher.add_argument('-g', '--aes-gcm', action='store_true', help='use AES-GCM cipher')
+
 args = argparser.parse_args()
 
 # open files
@@ -67,37 +75,36 @@ with \
 
     ae.ParseFromString(infile.read())
 
-    # random key
+    # random key, stored nonce
     if ae.kdf == ae.kdf_type.Value('None'):
       nonce = ae.nonce
       key = b64decode(einput('Enter Base64 encoded key: '))
 
-    # password-derived key
+    # password-derived key and nonce, stored salt
     else:
       nonce, key = KDF.argon2(passwd(), ae.nonce)
 
-    aead = AEAD.ChaCha20Poly1305(key)
-    message = aead.decrypt(nonce, ae.text, None)
-
+    # get cipher type and decrypt
+    message = aead(key, ae.cipher).decrypt(nonce, ae.text, None)
     outfile.write(message)
 
   # encryption
   else:
 
-    # random key
+    # generate random key, store nonce
     if args.random:
       nonce = ae.nonce = os.urandom(12)
       key = os.urandom(32)
       print('Encryption key:', b64encode(key).decode(), file=sys.stderr)
 
-    # password-derived key
+    # password-derived key and nonce, store salt
     else:
       ae.kdf = ae.kdf_type.Value('Argon2')
       ae.nonce = os.urandom(12)
       nonce, key = KDF.argon2(passwd(), ae.nonce)
 
-    aead = AEAD.ChaCha20Poly1305(key)
-    ae.text = aead.encrypt(nonce, infile.read(), None)
-
+    # set cipher type and encrypt
+    if args.aes_gcm: ae.cipher = ae.cipher_type.Value('AESGCM')
+    ae.text = aead(key, ae.cipher).encrypt(nonce, infile.read(), None)
     outfile.write(ae.SerializeToString())
 
