@@ -14,6 +14,10 @@ from base64 import b64encode, b64decode
 # https://cryptography.io/en/latest/hazmat/primitives/aead/
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305 as chacha
 
+# int encoding
+pack = lambda i, l=4: i.to_bytes(l, byteorder='big')
+unpack = lambda b: int.from_bytes(b, byteorder='big')
+
 # parse commandline arguments
 argparser = argparse.ArgumentParser()
 
@@ -84,6 +88,9 @@ with \
   MEK_AD = b'aenker media encryption key'
   CTX_AD = b'aenker ciphertext'
 
+  # conservative chunksize of 64kB
+  CHUNK = 64*1024
+
   # keygen
   if args.genkey:
 
@@ -105,21 +112,36 @@ with \
 
     nonce = infile.read(12)
     mek = infile.read(48)
-    ciphertext = infile.read()
 
     mek = chacha(kek).decrypt(nonce, mek, MEK_AD)
     memzero(kek)
-    message = chacha(mek).decrypt(nonce, ciphertext, CTX_AD)
-    memzero(mek)
 
-    outfile.write(message)
+    # TODO: currently no detection of missing chunks at the end
+    ctr = 0
+    aead = chacha(mek)
+    while True:
+      ctr += 1
+      length = infile.read(4)
+      if ctr > 1 and len(length) == 0:
+        break
+      if len(length) != 4:
+        raise ValueError('expected a 32 bit chunksize')
+      length = unpack(length)
+      #print(f'unpacked chunksize: {length}', file=sys.stderr)
+      ciphertext = infile.read(length)
+      if length == 0 or length != len(ciphertext):
+        raise ValueError('unexpected EOF')
+      #print(f'read chunksize: {len(ciphertext)}', file=sys.stderr)
+      message = aead.decrypt(pack(ctr, 12), ciphertext, CTX_AD)
+      outfile.write(message)
+    memzero(mek)
 
   # encryption
   else:
 
     # media encryption
     mek = os.urandom(32)
-    nonce = os.urandom(12) # TODO: nonce is used both for mek and message encryption
+    nonce = os.urandom(12) # TODO: nonce is too small for random choice with same key
 
     # generate random key encryption key
     if args.key is not None:
@@ -128,12 +150,22 @@ with \
       kek = os.urandom(32)
       print('Encryption key:', b64encode(kek).decode(), file=sys.stderr)
 
-    ciphertext = chacha(mek).encrypt(nonce, infile.read(), CTX_AD)
-    mekct = chacha(kek).encrypt(nonce, mek, MEK_AD)
-    memzero(mek)
-    memzero(kek)
-
     outfile.write(MAGIC)
     outfile.write(nonce)
+    
+    mekct = chacha(kek).encrypt(nonce, mek, MEK_AD)
+    memzero(kek)
     outfile.write(mekct)
-    outfile.write(ciphertext)
+
+    ctr = 0
+    aead = chacha(mek)
+    while True:
+      ctr += 1
+      chunk = infile.read(CHUNK)
+      if len(chunk) == 0:
+        break
+      ciphertext = aead.encrypt(pack(ctr, 12), chunk, CTX_AD)
+      outfile.write(pack(len(ciphertext)))
+      outfile.write(ciphertext)
+    memzero(mek)
+
