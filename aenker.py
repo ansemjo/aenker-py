@@ -32,8 +32,7 @@ arg_cmd.add_argument('-g', '--genkey', action='store_true', help='generate keyfi
 grp_kdf = argparser.add_argument_group('key material')
 arg_kdf = grp_kdf.add_mutually_exclusive_group()
 arg_kdf.add_argument('-r', '--random', action='store_true', help='random key from os.urandom() (default)')
-arg_kdf.add_argument('-k', '--key', help='32-byte base64-encoded key as argument')
-arg_kdf.add_argument('-f', '--file', help='32-byte base64-encoded key from file')
+arg_kdf.add_argument('-k', '--key', help='32-byte base64-encoded keyfile or argument')
 
 args = argparser.parse_args()
 
@@ -49,6 +48,11 @@ def parsekey(st, length=32):
   if len(key) != length:
     raise ValueError(f'key has invalid length ({len(key)} != {length})')
   return key
+
+# try to read key from file or argument
+def getkey(arg):
+  try: return readkey(arg)
+  except: return arg
 
 # some best-effort security measures
 # https://github.com/myfreeweb/pysectools
@@ -92,9 +96,7 @@ with \
       raise ValueError('invalid magic bytes')
 
     if args.key is not None:
-      kek = args.key
-    elif args.file is not None:
-      kek = readkey(args.file)
+      kek = getkey(args.key)
     else:
       sys.stdin = open('/dev/tty')
       kek = input('Enter Base64 encoded key: ')
@@ -121,9 +123,7 @@ with \
 
     # generate random key encryption key
     if args.key is not None:
-      kek = parsekey(args.key)
-    elif args.file is not None:
-      kek = parsekey(readkey(args.file))
+      kek = parsekey(getkey(args.key))
     else:
       kek = os.urandom(32)
       print('Encryption key:', b64encode(kek).decode(), file=sys.stderr)
