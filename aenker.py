@@ -6,6 +6,8 @@ import readline
 import sys
 import argparse
 import getpass
+import ctypes, ctypes.util
+import resource
 from base64 import b64encode, b64decode
 
 # authenticated encryption primitives
@@ -43,9 +45,30 @@ def readkey(file):
 # parse base64 string as 32 byte key
 def parsekey(st, length=32):
   key = b64decode(st)
+  memzero(st)
   if len(key) != length:
     raise ValueError(f'key has invalid length ({len(key)} != {length})')
   return key
+
+# some best-effort security measures
+# https://github.com/myfreeweb/pysectools
+try:
+  libc = ctypes.CDLL(ctypes.util.find_library("c"))
+  libc.mlockall(2)
+  resource.setrlimit(resource.RLIMIT_CORE, [0, 0])
+except:
+  pass
+
+# attempt to clear a string from memory
+def memzero(s):
+  try:
+    bufsize = len(s) + 1
+    offset = sys.getsizeof(s) - bufsize
+    location = id(s) + offset
+    ctypes.memset(location, 0, bufsize)
+    return True
+  except:
+    return False
 
 # open files
 with \
@@ -83,7 +106,9 @@ with \
     ciphertext = infile.read()
 
     mek = chacha(kek).decrypt(nonce, mek, MEK_AD)
+    memzero(kek)
     message = chacha(mek).decrypt(nonce, ciphertext, CTX_AD)
+    memzero(mek)
 
     outfile.write(message)
 
@@ -104,9 +129,11 @@ with \
       print('Encryption key:', b64encode(kek).decode(), file=sys.stderr)
 
     ciphertext = chacha(mek).encrypt(nonce, infile.read(), CTX_AD)
-    mek = chacha(kek).encrypt(nonce, mek, MEK_AD)
+    mekct = chacha(kek).encrypt(nonce, mek, MEK_AD)
+    memzero(mek)
+    memzero(kek)
 
     outfile.write(MAGIC)
     outfile.write(nonce)
-    outfile.write(mek)
+    outfile.write(mekct)
     outfile.write(ciphertext)
