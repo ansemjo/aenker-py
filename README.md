@@ -1,3 +1,5 @@
+**DEPRECATED** - use [ansemjo/aenker](https://github.com/ansemjo/aenker) instead
+
 # aenker
 
 `authenticated encryption ~> aencr ~> aenker`
